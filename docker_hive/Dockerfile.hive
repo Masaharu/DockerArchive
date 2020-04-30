@@ -1,0 +1,133 @@
+FROM centos:centos8.1.1911
+LABEL maintainer "mmks01"
+
+USER root
+
+####
+# 共通(SSH / 管理ユーザ dockerの作成 )
+
+# 必要なパッケージのインストール
+RUN dnf -y update && \
+    dnf -y install sudo passwd rsync which && \
+    dnf -y install openssh-server openssh-clients && \
+    dnf clean all
+
+# sshd設定
+RUN \
+# SSH接続速度アップのため：/etc/hostsの記載の範囲にしか接続しないため
+    sed -ri 's/^#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config && \
+# SSH接続速度アップのため：SingleSignonとかに使われるものだけど利用しないため
+    sed -ri 's/^GSSAPIAuthentication yes/GSSAPIAuthentication no/' /etc/ssh/sshd_config && \
+# パスワードなしでも接続できるようにするため 
+    sed -ri 's|session\s*required\s*pam_loginuid.so|session    optional     pam_loginuid.so|g' /etc/pam.d/sshd
+
+# 管理ユーザ作成 (docker)
+RUN groupadd docker && useradd -g docker docker && \
+    (echo "docker" | passwd docker --stdin) && \
+    (echo "docker ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/docker) 
+
+# サービス化
+RUN systemctl enable sshd
+
+# Port公開
+EXPOSE 22
+
+CMD ["/sbin/init"]
+
+#####
+# Hadoop環境構築
+
+# dnfでパッケージをインストール
+RUN dnf -y update && \
+    dnf -y install java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
+# Hiveのmetastore用 MariaDB
+    dnf -y install mariadb-server && \
+# imageサイズ削減化
+    dnf clean all
+
+# Hadoop用ユーザの作成
+RUN groupadd -g 5000 hadoop && useradd -g hadoop -u 5000 hadoop && \
+    (echo "hadoop" | passwd hadoop --stdin) && \
+    (echo "hadoop ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/hadoop) 
+
+USER hadoop
+# hadoopユーザのSSH秘密鍵/公開鍵の生成と配置
+RUN ssh-keygen -q -N "" -t rsa -f /home/hadoop/.ssh/id_rsa && \
+    (cat /home/hadoop/.ssh/id_rsa.pub >> /home/hadoop/.ssh/authorized_keys) && \
+    chmod 600 /home/hadoop/.ssh/authorized_keys
+
+# 環境変数を設定したbash_profileを配置
+COPY config/bash_profile /home/hadoop/.bash_profile
+COPY config/bashrc /home/hadoop/.bashrc
+
+USER root
+# Hadoop バイナリ配置・設定ファイル配置
+ADD downloaded/hadoop-3.2.1.tar.gz /opt
+ADD downloaded/apache-hive-3.1.2-bin.tar.gz /opt
+COPY downloaded/mysql-connector-java-8.0.*.jar /opt/apache-hive-3.1.2-bin/lib/
+
+# 設定ファイルのバックアップ
+RUN \
+    mv /opt/hadoop-3.2.1/etc/hadoop/hadoop-env.sh /opt/hadoop-3.2.1/etc/hadoop/hadoop-env.sh.org && \
+    mv /opt/hadoop-3.2.1/etc/hadoop/core-site.xml /opt/hadoop-3.2.1/etc/hadoop/core-site.xml.org && \
+    mv /opt/hadoop-3.2.1/etc/hadoop/hdfs-site.xml /opt/hadoop-3.2.1/etc/hadoop/hdfs-site.xml.org && \
+    mv /opt/hadoop-3.2.1/etc/hadoop/mapred-site.xml /opt/hadoop-3.2.1/etc/hadoop/mapred-site.xml.org && \
+    mv /opt/hadoop-3.2.1/etc/hadoop/yarn-site.xml /opt/hadoop-3.2.1/etc/hadoop/yarn-site.xml.org && \
+    mv /opt/hadoop-3.2.1/libexec/hadoop-functions.sh /opt/hadoop-3.2.1/libexec/hadoop-functions.sh.org 
+
+# 擬似分散環境用の設定を配置
+COPY config/hadoop-env.sh /opt/hadoop-3.2.1/etc/hadoop/
+COPY config/core-site.xml /opt/hadoop-3.2.1/etc/hadoop/
+COPY config/hdfs-site.xml /opt/hadoop-3.2.1/etc/hadoop/
+COPY config/mapred-site.xml /opt/hadoop-3.2.1/etc/hadoop/
+COPY config/yarn-site.xml /opt/hadoop-3.2.1/etc/hadoop/
+COPY config/hive-site.xml /opt/apache-hive-3.1.2-bin/conf/
+
+# ulimit設定変更
+RUN cp /etc/security/limits.conf /etc/security/limits.conf.org
+COPY config/limits.conf /etc/security/limits.conf
+
+# パッチなど
+# Hadoop: hadoop-functions.shの不具合対応版コピー
+COPY patch/hadoop-functions.sh /opt/hadoop-3.2.1/libexec/
+
+# Hadoop: SLF4Jがクラスパスに複数存在する問題
+# http://www.slf4j.org/codes.html#multiple_bindings
+RUN mv /opt/apache-hive-3.1.2-bin/lib/log4j-slf4j-impl-2.10.0.jar /opt/apache-hive-3.1.2-bin/lib/log4j-slf4j-impl-2.10.0.jar.del
+
+# Hive: guava.jar がhadoopとバージョンが一致していない問題
+RUN mv /opt/apache-hive-3.1.2-bin/lib/guava-19.0.jar /opt/apache-hive-3.1.2-bin/lib/guava-19.0.jar.del && \
+    cp /opt/hadoop-3.2.1/share/hadoop/hdfs/lib/guava-27.0-jre.jar /opt/apache-hive-3.1.2-bin/lib/.
+
+# ツールなどのコピー
+COPY tools /home/hadoop/tools
+COPY sqls /home/hadoop/sqls
+COPY init_scripts /home/hadoop/init_scripts
+COPY cleanup_scripts /home/hadoop/cleanup_scripts
+RUN chmod 750 /home/hadoop/tools/*.sh && \
+    chmod 750 /home/hadoop/init_scripts/*.sh && \
+    chmod 750 /home/hadoop/cleanup_scripts/*.sh
+
+# 配置資材のOwner設定
+RUN chown hadoop:hadoop -R /opt/hadoop-3.2.1 && \
+    chown hadoop:hadoop -R /opt/apache-hive-3.1.2-bin && \
+		chown hadoop:hadoop -R /home/hadoop
+
+# HDFSデータ用ディレクトリ作成
+RUN mkdir -p /data/hadoop/hdfs && chown hadoop:hadoop -R /data/hadoop && chmod 775 /data/hadoop/hdfs && \
+    mkdir -p /tmp/hive/java && chmod 1777 /tmp/hive/java && \
+    mkdir -p /tmp/hive/warehouse && chmod 1777 /tmp/hive/warehouse
+
+# MariaDBの設定ファイル
+RUN cp -rp /etc/my.cnf.d /etc/my.cnf.d.org 
+COPY config/mariadb-server.cnf /etc/my.cnf.d/
+
+# Port穴あけ
+# NameNode(HTTP), SecondaryNameNode(HTTP)
+EXPOSE 9870 9868 9864
+# Resource Manager Web UI
+EXPOSE 8088
+# JobTracker Web UI
+EXPOSE 19888
+EXPOSE 8020 8040 50030
+
