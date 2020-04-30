@@ -70,7 +70,7 @@ Please download the following and copy it to docker_hive/downloaded
   URL: https://hive.apache.org/index.html
 
 * mysql-connector-java-8.0.x.jar  
-  URL: https://dev.mysql.com/downloads/connector/j/
+  URL: https://dev.mysql.com/downloads/connector/j/  
   Remarks: You can find it in the unzipped archive file you downloaded.
 
 ## Step2: Build Docker Images
