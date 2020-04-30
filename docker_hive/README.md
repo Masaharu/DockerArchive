@@ -37,6 +37,8 @@ This document is a procedure for building an environment where you can run Hive 
 ├── cleanup_scripts         ... Contains script files for cleanup.
 │   
 └── tools                   ... Contains useful script files.
+    ├── start_hadoop.sh     ... Start Hadoop services.
+    └── stop_hadoop.sh      ... Stop all Hadoop services.
 ```
 
 ## Users
@@ -127,9 +129,11 @@ Please download the following and copy it to docker_hive/downloaded
 ```
   % whoami
     hadoop
+
   % cd
   % pwd
     /home/hadoop
+
   % cd init_scripts
   % ./01_init_metastore.sh
 ```
@@ -137,5 +141,20 @@ Please download the following and copy it to docker_hive/downloaded
 ## Step6: Start Hadoop
 Following Step 5, execute the following.
 ```
+  % pwd
+    /home/hadoop/init_scripts
+
   % ./02_init_hadoop.sh
+```
+Confirmation：
+```
+  example:
+
+  % jps
+    1059 SecondaryNameNode
+    851 DataNode
+    742 NameNode
+    1960 Jps
+    1325 ResourceManager
+    1438 NodeManager
 ```
