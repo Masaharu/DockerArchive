@@ -38,7 +38,9 @@ This document is a procedure for building an environment where you can run Hive 
 │   
 └── tools                   ... Contains useful script files.
     ├── start_hadoop.sh     ... Start Hadoop services.
-    └── stop_hadoop.sh      ... Stop all Hadoop services.
+    ├── stop_hadoop.sh      ... Stop all Hadoop services.
+    ├── start_hiveserver.sh ... Start Hive servers.
+    └── stop_hiveserver.sh  ... Stop Hive servers.
 ```
 
 ## Users
@@ -46,11 +48,11 @@ Following the instructions to create the container will create the following use
 * root
 * docker  
    - a general user
-   - ssh connection available
+   - ssh connection available (the password is the same as user name)
    - sudo available
 * hadoop  
    - the Hadoop/Hive services execution user
-   - ssh connection available
+   - ssh connection available (the password is the same as user name)
    - sudo available
 * mysql  
    - the MariaDB service execution user
@@ -157,4 +159,72 @@ Confirmation：
     1960 Jps
     1325 ResourceManager
     1438 NodeManager
+```
+
+## Step7: Start Hive Servers
+Following Step 6, execute the following.
+```
+  % /home/hadoop/tools/start_hiveserver.sh
+```
+Remarks:  
+There are some error messages, but there is no problem. (Under investigation on solution)
+
+## Step8: Check
+For Hive CLI:
+```
+  % hive  
+
+  (Remarks: There are some error messages, but no problem)
+  hive>
+
+  hive> show databases;
+  (response...)
+  OK
+  default
+  Time taken: 0.102 seconds, Fetched: 1 row(s)
+
+  (ctrl+c for exit)
+
+  ```
+
+  For Beeline:
+  ```
+  % beeline
+  (response...)
+  Beeline version 3.1.2 by Apache Hive
+
+  beeline> !connect jdbc:hive2://localhost:10000
+  (response...)
+  Connecting to jdbc:hive2://localhost:10000
+  Enter username for jdbc:hive2://localhost:10000: hive  <-type "hive"
+  Enter password for jdbc:hive2://localhost:10000: ****  <-type "hive"
+
+  (response...)
+  Connected to: Apache Hive (version 3.1.2)
+  Driver: Hive JDBC (version 3.1.2)
+  Transaction isolation: TRANSACTION_REPEATABLE_READ
+  0: jdbc:hive2://localhost:10000>
+
+  0: jdbc:hive2://localhost:10000> show databases;
+  (response...)
+  INFO  : Compiling command(queryId=hadoop_20200501050818_0e320d4e-98fc-4aab-9adc-a2222848d888): show databases
+  INFO  : Concurrency mode is disabled, not creating a lock manager
+  INFO  : Semantic Analysis Completed (retrial = false)
+  INFO  : Returning Hive schema: Schema(fieldSchemas:[FieldSchema(name:database_name, type:string, comment:from deserializer)], properties:null)
+  INFO  : Completed compiling command(queryId=hadoop_20200501050818_0e320d4e-98fc-4aab-9adc-a2222848d888); Time taken: 0.092 seconds
+  INFO  : Concurrency mode is disabled, not creating a lock manager
+  INFO  : Executing command(queryId=hadoop_20200501050818_0e320d4e-98fc-4aab-9adc-a2222848d888): show databases
+  INFO  : Starting task [Stage-0:DDL] in serial mode
+  INFO  : Completed executing command(queryId=hadoop_20200501050818_0e320d4e-98fc-4aab-9adc-a2222848d888); Time taken: 0.021 seconds
+  INFO  : OK
+  INFO  : Concurrency mode is disabled, not creating a lock manager
+  +----------------+
+  | database_name  |
+  +----------------+
+  | default        |
+  +----------------+
+  1 row selected (0.328 seconds)
+  0: jdbc:hive2://localhost:10000>
+
+  (ctrl+c for exit)
 ```
