@@ -45,6 +45,8 @@ This document is a procedure for building an environment where you can run Hive 
 
 ## Users
 Following the instructions to create the container will create the following users:
+
+###### CentOS:
 * root
 * docker  
    - a general user
@@ -57,6 +59,13 @@ Following the instructions to create the container will create the following use
 * mysql  
    - the MariaDB service execution user
 
+###### MariaDB:
+* root
+  - the password is mysql.
+* hive
+  - a user who connects to "metastore" schema for the hive metastore.
+  - the password is hive.
+  
 ## Preparation:
 
 * Install Docker and learn how to use for yourself.
